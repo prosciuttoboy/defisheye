@@ -1,29 +1,20 @@
 package dev.prosciutto.defisheye;
 
-import java.io.IOException;
-import java.net.URISyntaxException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import dev.prosciutto.defisheye.io.FileHelper;
+import dev.prosciutto.defisheye.opencv.ImageHelper;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 import java.util.stream.IntStream;
-import java.util.stream.Stream;
 import nu.pattern.OpenCV;
 import org.opencv.calib3d.Calib3d;
-import org.opencv.core.Core;
-import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.MatOfPoint3f;
 import org.opencv.core.Point3;
 import org.opencv.core.Size;
 import org.opencv.core.TermCriteria;
-import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 
-public class App {
+public final class App {
 
   private static final Size CHECKERBOARD = new Size(6, 9);
 
@@ -39,12 +30,14 @@ public class App {
     final var objectPoints = new ArrayList<Mat>();
     final var imagePoints = new ArrayList<Mat>();
     final var referenceImage = new Mat();
-    readImages("calibration").map(originalImage -> {
+    ImageHelper.resolveImageMatrices(FileHelper.listDirectory("calibration"))
+        .stream()
+        .map(calibrationImageMatrix -> {
           if (referenceImage.empty()) {
-            originalImage.copyTo(referenceImage);
+            calibrationImageMatrix.copyTo(referenceImage);
           }
-          final Mat newImage = originalImage.clone();
-          Imgproc.cvtColor(originalImage, newImage, Imgproc.COLOR_BGR2GRAY);
+          final Mat newImage = calibrationImageMatrix.clone();
+          Imgproc.cvtColor(calibrationImageMatrix, newImage, Imgproc.COLOR_BGR2GRAY);
           return newImage;
         })
         .forEach(greyImage -> {
@@ -59,51 +52,21 @@ public class App {
             imagePoints.add(corners);
           }
         });
-    final Mat K = Mat.zeros(3, 3, CvType.CV_64F);
-    final Mat D = Mat.zeros(4, 1, CvType.CV_64F);
-    final List<Mat> rvecs = new ArrayList<>();
-    final List<Mat> tvecs = new ArrayList<>();
-    Calib3d.fisheye_calibrate(objectPoints, imagePoints, referenceImage.size(), K, D, rvecs, tvecs,
-        Calib3d.fisheye_CALIB_RECOMPUTE_EXTRINSIC + Calib3d.fisheye_CALIB_CHECK_COND
-            + Calib3d.fisheye_CALIB_FIX_SKEW,
-        new TermCriteria(TermCriteria.EPS + TermCriteria.MAX_ITER, 30, 1e-6));
-    readImages("candidate")
-        .forEach(candidateImage -> {
-          final Mat map1 = new Mat();
-          final Mat map2 = new Mat();
-          Calib3d.fisheye_initUndistortRectifyMap(K, D, Mat.eye(3, 3, CvType.CV_64F), K,
-              referenceImage.size(), CvType.CV_16SC2, map1, map2);
-          final Mat undistortedImage = candidateImage.clone();
-          Imgproc.remap(candidateImage, undistortedImage, map1, map2, Imgproc.INTER_LINEAR,
-              Core.BORDER_CONSTANT);
-          try {
-            final var undistortedImageFilePath = Files.createTempFile("undistorted", ".jpg");
-            Imgcodecs.imwrite(undistortedImageFilePath.toString(), undistortedImage);
-            System.out.println(undistortedImageFilePath);
-          } catch (final IOException exception) {
-            throw new RuntimeException(exception);
-          }
-        });
-
-  }
-
-  private static Stream<Mat> readImages(final String directory) {
-    try {
-      final var uri = Optional.ofNullable(App.class.getClassLoader().getResource(directory))
-          .map(url -> {
-            try {
-              return url.toURI();
-            } catch (final URISyntaxException exception) {
-              throw new RuntimeException(exception);
-            }
-          })
-          .orElseThrow();
-      return Files.list(Paths.get(uri))
-          .map(Path::toString)
-          .map(Imgcodecs::imread)
-          .filter(mat -> !mat.empty());
-    } catch (final IOException exception) {
-      throw new RuntimeException(exception);
-    }
+    final var cameraIntrinsicAndDistortionCoefficientsMatrices = ImageHelper.computeCameraIntrinsicAndDistortionCoefficientsMatrices(
+        objectPoints, imagePoints, referenceImage.size());
+    final var undistortionAndRectificationMapMatrices = ImageHelper.computeUndistortionAndRectificationMapMatrices(
+        referenceImage.size(), cameraIntrinsicAndDistortionCoefficientsMatrices.getKey(),
+        cameraIntrinsicAndDistortionCoefficientsMatrices.getValue());
+    ImageHelper.resolveImageMatrices(FileHelper.listDirectory("candidate"))
+        .stream()
+        .map(distortedImageMatrix -> {
+          final var undistortedImageMatrix = ImageHelper.undistortImageMatrix(distortedImageMatrix,
+              undistortionAndRectificationMapMatrices.getKey(),
+              undistortionAndRectificationMapMatrices.getValue());
+          final var undistortedImageMatrixPath = FileHelper.createTemporaryFile("remapped", ".jpg");
+          ImageHelper.writeImageMatrix(undistortedImageMatrix, undistortedImageMatrixPath);
+          return undistortedImageMatrixPath;
+        })
+        .forEach(System.out::println);
   }
 }
