@@ -54,16 +54,21 @@ public final class App {
         });
     final var cameraIntrinsicAndDistortionCoefficientsMatrices = ImageHelper.computeCameraIntrinsicAndDistortionCoefficientsMatrices(
         objectPoints, imagePoints, referenceImage.size());
-    final var undistortionAndRectificationMapMatrices = ImageHelper.computeUndistortionAndRectificationMapMatrices(
+    final var estimatedCameraIntrinsicMatrix = ImageHelper.estimateCameraIntrinsicMatrix(
         referenceImage.size(), cameraIntrinsicAndDistortionCoefficientsMatrices.getKey(),
         cameraIntrinsicAndDistortionCoefficientsMatrices.getValue());
+    final var undistortionAndRectificationMapMatrices = ImageHelper.computeUndistortionAndRectificationMapMatrices(
+        referenceImage.size(), cameraIntrinsicAndDistortionCoefficientsMatrices.getKey(),
+        cameraIntrinsicAndDistortionCoefficientsMatrices.getValue(),
+        estimatedCameraIntrinsicMatrix);
     ImageHelper.resolveImageMatrices(FileHelper.listDirectory("candidate"))
         .stream()
         .map(distortedImageMatrix -> {
           final var undistortedImageMatrix = ImageHelper.undistortImageMatrix(distortedImageMatrix,
               undistortionAndRectificationMapMatrices.getKey(),
               undistortionAndRectificationMapMatrices.getValue());
-          final var undistortedImageMatrixPath = FileHelper.createTemporaryFile("remapped", ".jpg");
+          final var undistortedImageMatrixPath = FileHelper.createTemporaryFile("undistorted",
+              ".jpg");
           ImageHelper.writeImageMatrix(undistortedImageMatrix, undistortedImageMatrixPath);
           return undistortedImageMatrixPath;
         })

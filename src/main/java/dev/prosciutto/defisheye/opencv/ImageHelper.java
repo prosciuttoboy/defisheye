@@ -56,13 +56,13 @@ public final class ImageHelper {
   }
 
   public static Entry<Mat, Mat> computeUndistortionAndRectificationMapMatrices(final Size size,
-      final Mat cameraIntrinsicMatrix, final Mat distortionCoefficientsMatrix) {
+      final Mat cameraIntrinsicMatrix, final Mat distortionCoefficientsMatrix,
+      final Mat estimatedCameraIntrinsicMatrix) {
     final Mat undistortionMapMatrix = new Mat();
     final Mat rectificationMapMatrix = new Mat();
-    Calib3d.fisheye_initUndistortRectifyMap(cameraIntrinsicMatrix,
-        distortionCoefficientsMatrix, Mat.eye(3, 3, CvType.CV_32F),
-        cameraIntrinsicMatrix, size, CvType.CV_16SC2, undistortionMapMatrix,
-        rectificationMapMatrix);
+    Calib3d.fisheye_initUndistortRectifyMap(cameraIntrinsicMatrix, distortionCoefficientsMatrix,
+        Mat.eye(3, 3, CvType.CV_32F), estimatedCameraIntrinsicMatrix, size, CvType.CV_16SC2,
+        undistortionMapMatrix, rectificationMapMatrix);
     return Map.entry(undistortionMapMatrix, rectificationMapMatrix);
   }
 
@@ -82,6 +82,15 @@ public final class ImageHelper {
             + Calib3d.fisheye_CALIB_FIX_SKEW,
         new TermCriteria(TermCriteria.EPS + TermCriteria.MAX_ITER, 30, 1e-6));
     return Map.entry(cameraIntrinsicMatrix, distortionCoefficientsMatrix);
+  }
+
+  public static Mat estimateCameraIntrinsicMatrix(final Size size, final Mat cameraIntrinsicMatrix,
+      final Mat distortionCoefficientsMatrix) {
+    final Mat estimatedCameraIntrinsicMatrix = new Mat();
+    Calib3d.fisheye_estimateNewCameraMatrixForUndistortRectify(cameraIntrinsicMatrix,
+        distortionCoefficientsMatrix, size, Mat.eye(3, 3, CvType.CV_32F),
+        estimatedCameraIntrinsicMatrix, 0);
+    return estimatedCameraIntrinsicMatrix;
   }
 
   private static Optional<Mat> resolveImageMatrix(final Path path) {
