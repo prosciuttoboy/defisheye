@@ -7,12 +7,14 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Size;
 import org.opencv.core.TermCriteria;
 import org.opencv.imgcodecs.Imgcodecs;
@@ -91,6 +93,24 @@ public final class ImageHelper {
         distortionCoefficientsMatrix, size, Mat.eye(3, 3, CvType.CV_32F),
         estimatedCameraIntrinsicMatrix, 0);
     return estimatedCameraIntrinsicMatrix;
+  }
+
+  public static Optional<Mat> computeChessboardCorners(final Mat imageMatrix,
+      final Size chessboardSize) {
+    final Mat greyscaleImageMatrix = imageMatrix.clone();
+    Imgproc.cvtColor(imageMatrix, greyscaleImageMatrix, Imgproc.COLOR_BGR2GRAY);
+    final MatOfPoint2f chessboardCornersMatrix = new MatOfPoint2f();
+    Calib3d.findChessboardCorners(greyscaleImageMatrix, chessboardSize, chessboardCornersMatrix,
+        Calib3d.CALIB_CB_ADAPTIVE_THRESH + Calib3d.CALIB_CB_FAST_CHECK
+            + Calib3d.CALIB_CB_NORMALIZE_IMAGE);
+    return Optional.of(chessboardCornersMatrix)
+        .filter(Predicate.not(MatOfPoint2f::empty))
+        .map(nonEmptyChessboardCornersMatrix -> {
+          Imgproc.cornerSubPix(greyscaleImageMatrix, nonEmptyChessboardCornersMatrix,
+              new Size(3, 3), new Size(-1, -1),
+              new TermCriteria(TermCriteria.EPS + TermCriteria.MAX_ITER, 30, 0.1));
+          return nonEmptyChessboardCornersMatrix;
+        });
   }
 
   private static Optional<Mat> resolveImageMatrix(final Path path) {
