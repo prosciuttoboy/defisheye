@@ -1,4 +1,4 @@
-package dev.prosciutto.defisheye.io;
+package dev.prosciutto.defisheye;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -9,7 +9,7 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
-public final class FileHelper {
+final class FileHelper {
 
   private FileHelper() {
   }
@@ -18,7 +18,7 @@ public final class FileHelper {
     Objects.requireNonNull(directory);
 
     final var uri = Optional.ofNullable(FileHelper.class.getClassLoader().getResource(directory))
-        .orElseThrow();
+        .orElseThrow(() -> new IllegalArgumentException("No such directory: %s".formatted(directory)));
 
     try (final var pathStream = Files.list(Paths.get(uri.toURI()))) {
       return pathStream.toList();
